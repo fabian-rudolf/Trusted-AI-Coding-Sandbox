@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trusted AI Coding Sandbox</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        form {
+            margin-bottom: 1em;
+        }
+        .response {
+            border: 1px solid #ccc;
+            padding: 1em;
+            margin-top: 1em;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
+    <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+</head>
+<body>
+    <form id="codeForm" method="POST">
+        <label for="instruction">Code change request</label><br>
+        <textarea id="instruction" name="instruction" rows="4" cols="50">{{ instruction }}</textarea><br>
+        <label for="code">Internal code</label><br>
+        <textarea id="code" name="code" rows="4" cols="50">{{ code }}</textarea><br>
+        
+        <div id="response" class="response hidden">
+            <h5>Tokenized Code</h5>
+            <pre><code id="responseText" class="python hljs"></code></pre>
+            <h5>Detokenization Map</h5>
+            <pre><code id="responseMap" class="javascript hljs"></code></pre>
+            <h5>Model response</h5>
+            <pre><code id="responseModel" class="python hljs">[awaiting confirmation]</code></pre>
+            <h5>Model response detokenized locally</h5>
+            <pre><code id="responseModelDetokenized" class="python hljs">[awaiting confirmation]</code></pre>
+        </div>
+
+        <input type="hidden" id="anonymized_code" name="anonymized_code"></input>
+        <input type="submit" id="anonymizeButton" value="Tokenize">
+        <input type="button" id="sendButton" class="hidden" value="Send tokenized code to external assistant" onclick="sendToExternalAssistant()">
+        <input type="button" id="resetButton" value="Reset" onclick="resetForm()">
+    </form>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $("#instruction").focus();
+        });
+
+        $("#codeForm").submit(function(e) {
+            e.preventDefault();
+            $("#anonymizeButton, #sendButton, #resetButton").prop("disabled", true);
+            var formData = $(this).serializeArray().reduce(function(obj, item) {
+                obj[item.name] = item.value;
+                return obj;
+            }, {});
+            formData['confirm'] = false;
+
+            $.ajax({
+                url: '/',
+                type: 'post',
+                contentType: 'application/json',
+                data: JSON.stringify(formData),
+                success: function(response) {
+                    if (response.anonymized_code) {
+                        $("#response").show();
+                        $("#responseText").text(response.anonymized_code);
+                        $("#responseMap").text(response.deanonymize_mapping);
+                        $("#anonymizeButton").addClass('hidden');
+                        $("#sendButton").removeClass('hidden');
+                    } else {
+                        $("#response").show();
+                        $("#responseText").text(response);
+                    }
+                    $("#anonymizeButton, #sendButton, #resetButton").prop("disabled", false);
+                },
+                error: function(xhr, status, error) {
+                    $("#responseText").text(`${xhr}, ${status}, ${error}`);
+                    $("#anonymizeButton, #sendButton, #resetButton").prop("disabled", false);
+                }
+            });
+        });
+    
+        function sendToExternalAssistant() {
+            $("#responseModel").text("[generating]");
+            $("#responseModelDetokenized").text("[generating]");
+            var formData = $("#codeForm").serializeArray().reduce(function(obj, item) {
+                obj[item.name] = item.value;
+                return obj;
+            }, {});
+            formData['confirm'] = true;
+            $.ajax({
+                url: '/',
+                type: 'post',
+                contentType: 'application/json',
+                data: JSON.stringify(formData),
+                success: function(response) {
+                    $("#response").show();
+                    $("#responseModel").text(response['anonymized_response']);
+                    $("#responseModelDetokenized").text(response['detokenized_response']);
+                    hljs.highlightAll();
+                },
+                error: function(xhr, status, error) {
+                    $("#responseModel").text(`${xhr}, ${status}, ${error}`);
+                    $("#responseModelDetokenized").text("[see error above]");
+                }
+            });
+        }
+
+        function resetForm() {
+            $("#codeForm")[0].reset();
+            $("#response").hide();
+            $("#anonymizeButton").removeClass('hidden');
+            $("#sendButton").addClass('hidden');
+            $("#instruction").focus();
+        }
+    </script>
+</body>
+</html>
